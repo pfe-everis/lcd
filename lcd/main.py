@@ -103,10 +103,13 @@ async def match_pcds(source: str, target: UploadFile = File(...)):
             "data": None,
         }
     else:
-        mat_str = np.array2string(result.transformation, separator=",")
-        print(f"[INFO] Alignment successful. {mat_str}")
+        row_1 = list(result.transformation[0])
+        row_2 = list(result.transformation[1])
+        row_3 = list(result.transformation[2])
+        row_4 = list(result.transformation[3])
+        print(f"[INFO] Alignment successful.")
         return {
             "success": True,
             "message": "Successfully aligned the given point clouds.",
-            "data": mat_str,
+            "data": [row_1, row_2, row_3, row_4],
         }
