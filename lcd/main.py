@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+from numpy.core.fromnumeric import size
 import open3d
 import torch
 from fastapi import FastAPI
@@ -15,10 +16,41 @@ app = FastAPI()
 
 @app.post("/")
 async def match_pcds(source: str, target: UploadFile = File(...)):
+    # deg = 90
+    # deg = np.deg2rad(deg)
+    # x = np.array(
+    #     [
+    #         [np.cos(deg), 0, -np.sin(deg), 0],
+    #         [0, 1, 0, 0],
+    #         [np.sin(deg), 0, np.cos(deg), 0],
+    #         [0, 0, 0, 1],
+    #     ]
+    # )
+
+    # row_1 = list(x[0])
+    # row_2 = list(x[1])
+    # row_3 = list(x[2])
+    # row_4 = list(x[3])
+    # res = {
+    #     "success": True,
+    #     "message": "Successfully aligned the given point clouds.",
+    #     "row1": row_1,
+    #     "row2": row_2,
+    #     "row3": row_3,
+    #     "row4": row_4,
+    # }
+    # print(f"[INFO] Return body: {res}")
+    # return res
+    print("[INFO] POST received, starting to match...")
+
     # Wrtiting target PCD to disk, so it can be used later.
     with open("/tmp/target.pcd", "w") as f:
-        f.write(target.file.read().decode("utf-8"))
+        content = target.file.read().decode("utf-8")
+        f.write(content)
         target.file.close()
+        if len(content.split("\n")) <= 12:
+            print("[ERROR] Target file is empty.")
+            return {"success": False, "message": "Target file is empty."}
 
     print(f"[INFO] Downloading source PCD from {source}...")
     source_pcd_path: str = ""
@@ -85,8 +117,10 @@ async def match_pcds(source: str, target: UploadFile = File(...)):
         open3d.registration.RANSACConvergenceCriteria(4000000, 500),
     )
 
+    error = ""
     success = True
     if result.transformation.trace() == 4.0:
+        error = "trace"
         success = False
 
     information = open3d.registration.get_information_matrix_from_point_clouds(
@@ -94,13 +128,14 @@ async def match_pcds(source: str, target: UploadFile = File(...)):
     )
     n = min(len(source_points.points), len(target_points.points))
     if (information[5, 5] / n) < 0.3:  # overlap threshold
+        error = "overlap"
         success = False
 
     if not success:
-        return {
+        print(f"[INFO] Alignment failed.")
+        body = {
             "success": False,
-            "message": "Could not align given point clouds.",
-            "data": None,
+            "message": "Could not align given point clouds " + error,
         }
     else:
         row_1 = list(result.transformation[0])
@@ -108,8 +143,14 @@ async def match_pcds(source: str, target: UploadFile = File(...)):
         row_3 = list(result.transformation[2])
         row_4 = list(result.transformation[3])
         print(f"[INFO] Alignment successful.")
-        return {
+        body = {
             "success": True,
             "message": "Successfully aligned the given point clouds.",
-            "data": [row_1, row_2, row_3, row_4],
+            "row1": row_1,
+            "row2": row_2,
+            "row3": row_3,
+            "row4": row_4,
         }
+
+    print(f"[INFO] Return body: {body}")
+    return body
